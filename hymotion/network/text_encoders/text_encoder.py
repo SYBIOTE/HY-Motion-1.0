@@ -7,9 +7,20 @@ from torch import Tensor
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    AutoConfig,
+    Qwen2Config,
+    Qwen2ForCausalLM,
     CLIPTextModel,
     CLIPTokenizer,
 )
+
+# Register qwen3 as qwen2 architecture to fix loading error
+try:
+    AutoConfig.register("qwen3", Qwen2Config)
+    if "qwen3" not in AutoModelForCausalLM._model_mapping:
+        AutoModelForCausalLM.register(Qwen2Config, Qwen2ForCausalLM)
+except Exception as e:
+    print(f"Warning: Failed to register qwen3 model type: {e}")
 
 from ...utils.type_converter import get_module_device
 from .model_constants import PROMPT_TEMPLATE_ENCODE_HUMAN_MOTION
@@ -80,7 +91,10 @@ class HYTextModel(nn.Module):
             )
             self.sentence_emb_text_encoder = SENTENCE_EMB_LAYOUT[sentence_emb_type][
                 "text_encoder_class"
-            ].from_pretrained(SENTENCE_EMB_LAYOUT[sentence_emb_type]["module_path"])
+            ].from_pretrained(
+                SENTENCE_EMB_LAYOUT[sentence_emb_type]["module_path"],
+                torch_dtype=torch.float16  # Use FP16 to save memory
+            )
             self.sentence_emb_text_encoder = self.sentence_emb_text_encoder.eval().requires_grad_(False)
             self.vtxt_dim = self.sentence_emb_text_encoder.config.hidden_size
 
@@ -97,12 +111,47 @@ class HYTextModel(nn.Module):
             self.llm_tokenizer = LLM_ENCODER_LAYOUT[llm_type]["tokenizer_class"].from_pretrained(
                 LLM_ENCODER_LAYOUT[llm_type]["module_path"],
                 padding_side="right",
+                use_fast=False,  # Workaround for tokenizers library compatibility issue
+                trust_remote_code=True,
             )
-            self.llm_text_encoder = LLM_ENCODER_LAYOUT[llm_type]["text_encoder_class"].from_pretrained(
-                LLM_ENCODER_LAYOUT[llm_type]["module_path"],
-                low_cpu_mem_usage=True,
-                torch_dtype=torch.bfloat16,
-            )
+
+            # Configure quantization based on environment variable
+            quantization = os.environ.get("QWEN_QUANTIZATION", "int4").lower()
+            print(f">>> Loading Qwen3-8B with quantization: {quantization}")
+
+            if quantization == "int4":
+                from transformers import BitsAndBytesConfig
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.bfloat16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4"
+                )
+                self.llm_text_encoder = LLM_ENCODER_LAYOUT[llm_type]["text_encoder_class"].from_pretrained(
+                    LLM_ENCODER_LAYOUT[llm_type]["module_path"],
+                    quantization_config=bnb_config,
+                    device_map="auto",
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True,
+                )
+            elif quantization == "int8":
+                from transformers import BitsAndBytesConfig
+                bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+                self.llm_text_encoder = LLM_ENCODER_LAYOUT[llm_type]["text_encoder_class"].from_pretrained(
+                    LLM_ENCODER_LAYOUT[llm_type]["module_path"],
+                    quantization_config=bnb_config,
+                    device_map="auto",
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True,
+                )
+            else:  # quantization == "none"
+                self.llm_text_encoder = LLM_ENCODER_LAYOUT[llm_type]["text_encoder_class"].from_pretrained(
+                    LLM_ENCODER_LAYOUT[llm_type]["module_path"],
+                    low_cpu_mem_usage=True,
+                    torch_dtype=torch.bfloat16,
+                    trust_remote_code=True,
+                )
+
             self.llm_text_encoder = self.llm_text_encoder.eval().requires_grad_(False)
             self.ctxt_dim = self.llm_text_encoder.config.hidden_size
 

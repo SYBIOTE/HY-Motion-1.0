@@ -266,7 +266,7 @@ def save_batch_results(results_list: List[dict], output_dir: str):
         json.dump(results_list, f, ensure_ascii=False, indent=2)
 
     # save summary
-    total_files = len(results_list)
+    totalFiles = len(results_list)
     total_texts = sum(r["total"] for r in results_list)
     total_success = sum(r["success"] for r in results_list)
     total_failed = sum(r["failed"] for r in results_list)
@@ -275,7 +275,7 @@ def save_batch_results(results_list: List[dict], output_dir: str):
     with open(summary_file, "w", encoding="utf-8") as f:
         f.write(f"Batch processing summary - {timestamp}\n")
         f.write("=" * 50 + "\n")
-        f.write(f"Number of processed files: {total_files}\n")
+        f.write(f"Number of processed files: {totalFiles}\n")
         f.write(f"Total number of texts: {total_texts}\n")
         f.write(f"Number of successful tasks: {total_success}\n")
         f.write(f"Number of failed tasks: {total_failed}\n")

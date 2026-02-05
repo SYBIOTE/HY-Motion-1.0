@@ -153,6 +153,41 @@ class T2MRuntime:
 
         self._loaded = True
 
+        # Log memory usage after loading
+        self._log_memory_usage("After model loading")
+
+    def _log_memory_usage(self, stage: str):
+        """Log GPU memory usage at different stages."""
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                allocated = torch.cuda.memory_allocated(i) / 1024**3
+                reserved = torch.cuda.memory_reserved(i) / 1024**3
+                total = torch.cuda.get_device_properties(i).total_memory / 1024**3
+                print(f">>> [{stage}] GPU {i}: {allocated:.2f}GB allocated / {total:.2f}GB total ({allocated/total*100:.1f}%)")
+
+    def extract_models_for_mmgp(self):
+        """Expose internal models for MMGP offloading."""
+        models = {}
+        # Iterate through loaded pipelines
+        for i, p in enumerate(self.pipelines):
+            prefix = f"pipe_{i}"
+
+            # Extract Text Encoder
+            # The text_encoder attribute is a wrapper (HYTextModel)
+            # We need to expose the underlying transformers models for mmgp to handle them correctly
+            if hasattr(p, "text_encoder") and p.text_encoder is not None:
+                wrapper = p.text_encoder
+                if hasattr(wrapper, "llm_text_encoder") and wrapper.llm_text_encoder is not None:
+                    models[f"{prefix}_llm"] = wrapper.llm_text_encoder
+                if hasattr(wrapper, "sentence_emb_text_encoder") and wrapper.sentence_emb_text_encoder is not None:
+                    models[f"{prefix}_clip"] = wrapper.sentence_emb_text_encoder
+
+            # Extract Denoiser (DiT)
+            if hasattr(p, "denoiser") and p.denoiser is not None:
+                models[f"{prefix}_denoiser"] = p.denoiser
+
+        return models
+
     def _acquire_pipeline(self) -> int:
         while True:
             with self._lock:

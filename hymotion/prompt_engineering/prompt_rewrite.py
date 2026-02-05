@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import random
 import re
 import time
@@ -269,13 +270,39 @@ class PromptRewriter:
     def _load_model(self):
         if self.model is None:
             print(f">>> Loading prompter model from {self.model_path}")
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_path,
-                torch_dtype=torch.float16,
-                device_map="auto",
-                load_in_4bit=True,
-            )
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
+
+            # Check if CPU mode is requested via environment variable
+            use_cpu = os.environ.get("PROMPT_CPU_MODE", "false").lower() == "true"
+
+            if use_cpu:
+                print(">>> Loading prompt rewriter on CPU (slower but uses no GPU memory)")
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_path,
+                    torch_dtype=torch.float32,  # CPU doesn't support float16 well
+                    device_map={"": "cpu"},
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True,
+                )
+            else:
+                # Configure 4-bit quantization with CPU offloading for limited GPU memory
+                from transformers import BitsAndBytesConfig
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4",
+                    llm_int8_enable_fp32_cpu_offload=True  # Enable CPU offloading
+                )
+
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_path,
+                    quantization_config=bnb_config,
+                    device_map="auto",
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True,
+                )
+
             self.model.eval()
 
     def rewrite_prompt_and_infer_time(
