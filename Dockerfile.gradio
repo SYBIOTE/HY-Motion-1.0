@@ -1,0 +1,35 @@
+# HY-Motion Gradio app (GPU)
+# Build: docker build -f Dockerfile.gradio -t hymotion-gradio .
+# Run:   docker run --gpus all -p 8080:8080 -e MODEL_PATH=/app/ckpts/tencent/HY-Motion-1.0-Lite hymotion-gradio
+
+ARG CUDA_VERSION=12.4.1
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-venv python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY hymotion/ hymotion/
+COPY stats/ stats/
+COPY gradio_app.py .
+COPY examples/ examples/
+COPY assets/ assets/
+
+# Optional: set at run time or build time; app can also download from Hugging Face
+# ENV MODEL_PATH=/app/ckpts/tencent/HY-Motion-1.0-Lite
+
+ENV QWEN_QUANTIZATION=int4
+ENV DISABLE_PROMPT_ENGINEERING=True
+ENV USE_HF_MODELS=1
+ENV PORT=8080
+
+EXPOSE 8080
+
+# Cloud Run sets PORT; default 8080 for local runs
+CMD ["python", "gradio_app.py"]

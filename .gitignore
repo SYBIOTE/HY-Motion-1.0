@@ -9,6 +9,7 @@ __pycache__/
 *.pyzw
 *.pyzwz
 cache
+.venv/
 
 .vscode/
 

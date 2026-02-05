@@ -1,0 +1,32 @@
+# HY-Motion microservice (API only, no Gradio)
+# Build: docker build -f Dockerfile.api -t hymotion-api .
+# Run:   docker run --gpus all -p 8080:8080 -e MODEL_PATH=/app/ckpts/tencent/HY-Motion-1.0-Lite hymotion-api
+
+ARG CUDA_VERSION=12.4.1
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-venv python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY hymotion/ hymotion/
+COPY stats/ stats/
+COPY api.py .
+
+# Optional: copy or download ckpts at build time (or mount at run time)
+# ENV MODEL_PATH=/app/ckpts/tencent/HY-Motion-1.0-Lite
+
+ENV QWEN_QUANTIZATION=int4
+ENV DISABLE_PROMPT_ENGINEERING=True
+ENV USE_HF_MODELS=1
+ENV PORT=8080
+
+EXPOSE 8080
+
+CMD ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080"]

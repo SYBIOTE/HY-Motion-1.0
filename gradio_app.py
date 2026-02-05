@@ -970,4 +970,10 @@ if __name__ == "__main__":
     # Create demo at module level for Hugging Face Spaces
     final_model_path = args.model_path if args.model_path else try_to_download_model()
     demo = create_demo(final_model_path)
-    demo.launch(share=args.share)
+    # Cloud Run / container: bind to 0.0.0.0 and use PORT env
+    server_port = int(os.environ.get("PORT", 8080))
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=server_port,
+        share=args.share,
+    )
