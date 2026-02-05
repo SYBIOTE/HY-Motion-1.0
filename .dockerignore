@@ -1,0 +1,12 @@
+.venv
+.git
+__pycache__
+*.pyc
+.venv
+.vscode
+ckpts/*
+!ckpts/README.md
+test_*
+debug
+output
+tencent

@@ -1,0 +1,37 @@
+# Cloud Build config for HY-Motion
+#
+# API (production):
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=_REGION=us-central1
+#
+# Gradio (testing):
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_SERVICE=gradio,_DOCKERFILE=Dockerfile.gradio,_REGION=us-central1
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - '${_DOCKERFILE}'
+      - '--cache-from=${_IMAGE}'
+      - '-t'
+      - '${_IMAGE}'
+      - '.'
+    timeout: 1800s
+
+images:
+  - '${_IMAGE}'
+
+substitutions:
+  _SERVICE: 'api'
+  _DOCKERFILE: 'Dockerfile'
+  _REGION: 'us-central1'
+  _IMAGE: '${_REGION}-docker.pkg.dev/${PROJECT_ID}/hymotion/hymotion-${_SERVICE}:latest'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: 100
+  logging: CLOUD_LOGGING_ONLY
+  dynamic_substitutions: true
+
+timeout: 2400s
