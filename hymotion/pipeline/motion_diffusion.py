@@ -139,7 +139,19 @@ class MotionGeneration(torch.nn.Module):
         self.random_generator_on_gpu = kwargs.get("random_generator_on_gpu", True)
 
     def _parse_buffer(self, mode: str) -> None:
-        self.body_model = WoodenMesh()
+        # WoodenMesh is optional: used for keypoints3d and ground alignment. When absent,
+        # API returns rot6d/transl unadjusted; app can compute keypoints and ground alignment.
+        self.body_model = None
+        if os.environ.get("DISABLE_WOODEN_MESH", "").lower() not in ("1", "true", "yes"):
+            model_path = os.environ.get("WOODEN_MODEL_PATH", "scripts/gradio/static/assets/dump_wooden")
+            v_template = osp.join(model_path, "v_template.bin")
+            if osp.isfile(v_template):
+                try:
+                    self.body_model = WoodenMesh(model_path)
+                except Exception as e:
+                    print(f"[MotionGeneration] WoodenMesh not loaded: {e}")
+        if self.body_model is None:
+            print("[MotionGeneration] Running without body model (keypoints3d=zeros, no ground alignment).")
         self._find_motion_type(mode=mode)
         self._load_mean_std()
 

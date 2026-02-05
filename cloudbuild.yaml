@@ -9,6 +9,13 @@
 
 steps:
   - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker pull ${_IMAGE} || exit 0'
+    id: pull
+
+  - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-f'
@@ -18,6 +25,7 @@ steps:
       - '${_IMAGE}'
       - '.'
     timeout: 1800s
+    waitFor: ['pull']
 
 images:
   - '${_IMAGE}'

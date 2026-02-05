@@ -9,6 +9,7 @@ Env:
     MODEL_PATH: Directory containing config.yml and latest.ckpt (default: ckpts/tencent/HY-Motion-1.0-Lite)
     DISABLE_PROMPT_ENGINEERING: Set to True to disable LLM prompt rewriter (saves VRAM)
     QWEN_QUANTIZATION: int4 | int8 | none (default: int4 for low VRAM)
+    DISABLE_WOODEN_MESH: Set to 1 to skip loading wooden body model (keypoints3d=zeros, transl unadjusted; app does ground alignment)
 """
 
 import os

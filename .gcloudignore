@@ -1,0 +1,21 @@
+# Reduce upload size for gcloud builds submit (API and Gradio both use this tree)
+.git
+.venv
+__pycache__
+*.pyc
+.vscode
+ckpts/*
+!ckpts/README.md
+test_*
+debug
+output
+tencent
+*.md
+!README.md
+License.txt
+QUANTIZATION_GUIDE.md
+README_zh_cn.md
+API_README.md
+DEPLOY_CLOUD_RUN.md
+local_infer.py
+test_quantization.py

@@ -3,7 +3,7 @@
 Scale to zero when idle — you pay only while instances are running.
 
 Two services:
-- **API** (`Dockerfile`) — production, JSON-only, used by the SaaS app
+- **API** (`Dockerfile`) — production, JSON-only, used by the SaaS app. Does not load the wooden body model (`DISABLE_WOODEN_MESH=1`): returns `rot6d`, `transl`, `root_rotations_mat` and `keypoints3d` as zeros; the app does retargeting and ground alignment.
 - **Gradio** (`Dockerfile.gradio`) — testing/demo UI for the model
 
 ## Prerequisites
