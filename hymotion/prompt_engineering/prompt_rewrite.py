@@ -262,7 +262,7 @@ class PromptRewriter:
                 )
             )
         else:
-            self.model_path = model_path or "Text2MotionPrompter/Text2MotionPrompter"
+            self.model_path = model_path or "./ckpts/Text2MotionPrompter"
             self.tokenizer = None
             self.model = None
             self._load_model()

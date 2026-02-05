@@ -36,6 +36,7 @@
 
 
 ## 🔥 News
+- **Jan 29, 2026**: 📊 We released the evaluation prompts and code for **SSAE** (Structured Semantic Alignment Evaluation), a VLM-based metric designed to assess the semantic alignment of generated videos. Check the `ssae` directory for usage details!
 - **Dec 30, 2025**: 🤗 We released the inference code and pretrained models of [HY-Motion 1.0](https://huggingface.co/tencent/HY-Motion-1.0). Please give it a try via our [HuggingFace Space](https://huggingface.co/spaces/tencent/HY-Motion-1.0) and our [Official Site](https://hunyuan.tencent.com/motion)!
 
 
@@ -174,6 +175,11 @@ If you found this repository helpful, please cite our reports:
   year={2025}
 }
 ```
+
+## 🤗 Community Integrations
+We appreciate the community for creating integrations for HY-Motion! Here are some third-party implementations:
+
+- [ComfyUI-HY-Motion1](https://github.com/jtydhr88/ComfyUI-HY-Motion1) by [@jtydhr88](https://github.com/jtydhr88)
 
 ## Acknowledgements
 
