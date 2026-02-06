@@ -48,6 +48,11 @@ from hymotion.utils.t2m_runtime import T2MRuntime
 
 NUM_WORKERS = torch.cuda.device_count() if torch.cuda.is_available() else 1
 
+# Base constraints to reduce GPU VRAM (see README)
+MAX_PROMPT_WORDS = 30
+MAX_DURATION_SEC = 5.0
+DEFAULT_NUM_SEEDS = 1
+
 # Global runtime instance for Zero GPU lazy loading
 _global_runtime = None
 _global_args = None
@@ -447,7 +452,7 @@ class T2MGradioUI:
         return HEADER_BASE_MD
 
     def _generate_random_seeds(self):
-        seeds = [random.randint(0, 999) for _ in range(4)]
+        seeds = [random.randint(0, 999) for _ in range(DEFAULT_NUM_SEEDS)]
         return ",".join(map(str, seeds))
 
     def _prompt_engineering(
@@ -497,6 +502,19 @@ class T2MGradioUI:
             if not text_to_use:
                 return "Error: Rewritten text is empty, please rewrite the text first", []
 
+        # Enforce VRAM-reduction constraints (see README)
+        word_count = len(text_to_use.split())
+        if word_count > MAX_PROMPT_WORDS:
+            return (
+                f"Error: Text has {word_count} words. Use {MAX_PROMPT_WORDS} words or fewer to reduce VRAM.",
+                [],
+            )
+        duration = min(float(duration), MAX_DURATION_SEC)
+
+        # Use only first seed to reduce VRAM (base constraint)
+        seeds_parsed = [s.strip() for s in seed_input.split(",") if s.strip()]
+        seeds_csv = seeds_parsed[0] if seeds_parsed else "0"
+
         try:
             # Use runtime from global if available (for Zero GPU), otherwise use self.runtime
             runtime = _global_runtime if _global_runtime is not None else self.runtime
@@ -506,7 +524,7 @@ class T2MGradioUI:
             # Use GPU-decorated function for Zero GPU support
             html_content, fbx_files = generate_motion_on_gpu(
                 text=text_to_use,
-                seeds_csv=seed_input,
+                seeds_csv=seeds_csv,
                 motion_duration=duration,
                 cfg_scale=cfg_scale,
                 output_format=req_format,
@@ -553,7 +571,8 @@ class T2MGradioUI:
                 for text, duration in example_data:
                     display_text = f"{text[:50]}..." if len(text) > 50 else text
                     if display_text == selected_example:
-                        return text, self._generate_random_seeds(), gr.update(value=duration)
+                        clamped_duration = min(duration, MAX_DURATION_SEC)
+                        return text, self._generate_random_seeds(), gr.update(value=clamped_duration)
             return "", self._generate_random_seeds(), gr.update()
 
     def build_ui(self):
@@ -567,6 +586,7 @@ class T2MGradioUI:
                     self.text_input = gr.Textbox(
                         label="📝 Input Text",
                         placeholder="Enter text to generate motion, support Chinese and English text input.",
+                        info=f"Recommendation: use less than {MAX_PROMPT_WORDS} words to reduce VRAM.",
                     )
                     # Rewritten textbox
                     self.rewritten_text = gr.Textbox(
@@ -575,14 +595,14 @@ class T2MGradioUI:
                         interactive=True,
                         visible=False,
                     )
-                    # Duration slider
+                    # Duration slider (capped for VRAM; see README)
                     self.duration_slider = gr.Slider(
                         minimum=0.5,
-                        maximum=12,
-                        value=5.0,
+                        maximum=MAX_DURATION_SEC,
+                        value=MAX_DURATION_SEC,
                         step=0.1,
                         label="⏱️ Action Duration (seconds)",
-                        info="Feel free to adjust the action duration",
+                        info=f"Max {MAX_DURATION_SEC}s to reduce VRAM.",
                     )
 
                     # Execute buttons
@@ -710,9 +730,9 @@ class T2MGradioUI:
                 with gr.Column(scale=3):
                     self.seed_input = gr.Textbox(
                         label="🎯 Random Seed List (comma separated)",
-                        value="0,1,2,3",
-                        placeholder="Enter comma separated seed list (e.g.: 0,1,2,3)",
-                        info="Random seeds control the diversity of generated motions",
+                        value="0",
+                        placeholder="Enter comma separated seed list (e.g.: 0)",
+                        info=f"Default 1 seed to reduce VRAM. More seeds = more diversity, higher VRAM.",
                     )
                 with gr.Column(scale=1, min_width=60, elem_classes=["dice-container"]):
                     self.dice_btn = gr.Button(
