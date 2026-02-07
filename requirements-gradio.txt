@@ -1,0 +1,4 @@
+# Extra deps only the Gradio service needs
+--extra-index-url https://gitlab.inria.fr/api/v4/projects/18692/packages/pypi/simple
+gradio==3.50.2
+fbxsdkpy==2020.1.post2

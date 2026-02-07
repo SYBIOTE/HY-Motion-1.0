@@ -1,0 +1,58 @@
+# HY-Motion shared base image
+# Contains: CUDA runtime, Python 3.11, uv, PyTorch, shared deps, pre-downloaded model.
+# Rebuilt only when deps or model version change — API / Gradio images layer on top.
+#
+# Build:
+#   docker build -f Dockerfile.base -t hymotion-base .
+#
+# Cloud Build (see cloudbuild.yaml):
+#   Built automatically as the first step; API & Gradio images use it via FROM.
+
+ARG CUDA_VERSION=12.4.1
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-venv python3-pip curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3 /usr/bin/python
+
+# Install uv for 10-50x faster pip installs
+RUN pip install uv
+
+WORKDIR /app
+
+# ── Layer 1: PyTorch (heaviest, ~2.5 GB, changes rarely) ──
+COPY requirements-torch.txt .
+RUN uv pip install --system --no-cache -r requirements-torch.txt
+
+# ── Layer 2: Shared ML deps (changes occasionally) ──
+COPY requirements-base.txt .
+RUN uv pip install --system --no-cache -r requirements-base.txt
+
+# ── Layer 3: Pre-download models (changes only on model version bump) ──
+ARG MODEL_VERSION=v1.0-lite
+RUN python -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download(repo_id='tencent/HY-Motion-1.0', allow_patterns='HY-Motion-1.0-Lite/*', local_dir='/app/ckpts/tencent'); \
+snapshot_download(repo_id='Qwen/Qwen3-8B', local_dir='/app/ckpts/Qwen3-8B'); \
+snapshot_download(repo_id='openai/clip-vit-large-patch14', local_dir='/app/ckpts/clip-vit-large-patch14'); \
+"
+
+# Shared app code (used by both API and Gradio)
+COPY hymotion/ hymotion/
+COPY stats/ stats/
+
+# Sensible defaults
+ENV MODEL_PATH=/app/ckpts/tencent/HY-Motion-1.0-Lite \
+    QWEN_QUANTIZATION=int4 \
+    DISABLE_PROMPT_ENGINEERING=True \
+    USE_HF_MODELS=0 \
+    MMGP_PROFILE=1 \
+    MMGP_VERBOSE=1 \
+    PORT=8080

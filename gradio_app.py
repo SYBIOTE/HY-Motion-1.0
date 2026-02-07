@@ -8,6 +8,10 @@ import re
 import textwrap
 from typing import List, Optional, Tuple, Union
 
+# ── Sensible defaults (set before any module reads these env vars) ──
+os.environ.setdefault("QWEN_QUANTIZATION", "int4")
+os.environ.setdefault("DISABLE_PROMPT_ENGINEERING", "True")
+
 import torch
 from huggingface_hub import snapshot_download
 
@@ -859,7 +863,7 @@ def create_demo(final_model_path):
         output_dir = "output/gradio"
         prompt_engineering_host = os.environ.get("PROMPT_HOST", None)
         prompt_engineering_model_path = os.environ.get("PROMPT_MODEL_PATH", None)
-        disable_prompt_engineering = os.environ.get("DISABLE_PROMPT_ENGINEERING", False)
+        disable_prompt_engineering = os.environ.get("DISABLE_PROMPT_ENGINEERING", "True").lower() == "true"
         # Quantization configuration
         quantize_text_encoder = os.environ.get("QWEN_QUANTIZATION", "int4")
         # MMGP Offloading profile

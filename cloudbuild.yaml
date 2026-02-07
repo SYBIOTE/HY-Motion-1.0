@@ -1,5 +1,9 @@
 # Cloud Build config for HY-Motion
 #
+# Builds a shared base image first, then the service image on top.
+# The base layer (CUDA + Python + PyTorch + model) is cached in the registry
+# so code-only changes rebuild in seconds.
+#
 # API (production):
 #   gcloud builds submit --config cloudbuild.yaml --substitutions=_REGION=us-central1
 #
@@ -8,36 +12,65 @@
 #     --substitutions=_SERVICE=gradio,_DOCKERFILE=Dockerfile.gradio,_REGION=us-central1
 
 steps:
+  # ── Step 1: Pull existing images for cache (parallel, fail-ok) ──
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
     args:
       - '-c'
-      - 'docker pull ${_IMAGE} || exit 0'
-    id: pull
+      - 'docker pull ${_BASE_IMAGE} || true'
+    id: pull-base
 
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker pull ${_IMAGE} || true'
+    id: pull-service
+    waitFor: ['-']   # run in parallel with pull-base
+
+  # ── Step 2: Build the shared base image ──
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile.base'
+      - '--cache-from=${_BASE_IMAGE}'
+      - '-t'
+      - '${_BASE_IMAGE}'
+      - '.'
+    timeout: 1800s
+    waitFor: ['pull-base']
+    id: build-base
+
+  # ── Step 3: Build the service image (API or Gradio) on top of the base ──
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-f'
       - '${_DOCKERFILE}'
+      - '--build-arg'
+      - 'BASE_IMAGE=${_BASE_IMAGE}'
       - '--cache-from=${_IMAGE}'
       - '-t'
       - '${_IMAGE}'
       - '.'
-    timeout: 1800s
-    waitFor: ['pull']
+    timeout: 600s
+    waitFor: ['pull-service', 'build-base']
+    id: build-service
 
 images:
+  - '${_BASE_IMAGE}'
   - '${_IMAGE}'
 
 substitutions:
   _SERVICE: 'api'
   _DOCKERFILE: 'Dockerfile'
   _REGION: 'us-central1'
+  _BASE_IMAGE: '${_REGION}-docker.pkg.dev/${PROJECT_ID}/hymotion/hymotion-base:latest'
   _IMAGE: '${_REGION}-docker.pkg.dev/${PROJECT_ID}/hymotion/hymotion-${_SERVICE}:latest'
 
 options:
-  machineType: 'E2_HIGHCPU_8'
+  machineType: 'E2_HIGHCPU_32'
   diskSizeGb: 100
   logging: CLOUD_LOGGING_ONLY
   dynamic_substitutions: true

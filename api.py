@@ -10,6 +10,8 @@ Env:
     DISABLE_PROMPT_ENGINEERING: Set to True to disable LLM prompt rewriter (saves VRAM)
     QWEN_QUANTIZATION: int4 | int8 | none (default: int4 for low VRAM)
     DISABLE_WOODEN_MESH: Set to 1 to skip loading wooden body model (keypoints3d=zeros, transl unadjusted; app does ground alignment)
+    MMGP_PROFILE: 0=off, 1=max offload (lowest VRAM, slowest), 3=balanced (default: 3)
+    MMGP_VERBOSE: Logging level for MMGP offloading (default: 1)
 """
 
 import os
@@ -30,9 +32,37 @@ from hymotion.utils.t2m_runtime import T2MRuntime
 MODEL_PATH = os.environ.get("MODEL_PATH", "ckpts/tencent/HY-Motion-1.0-Lite")
 CONFIG_PATH = os.path.join(MODEL_PATH, "config.yml")
 CKPT_PATH = os.path.join(MODEL_PATH, "latest.ckpt")
-MOTION_FPS = 20
+# Matches pipeline default output_mesh_fps (30). TODO: pass fps dynamically (e.g. from pipeline or request).
+MOTION_FPS = 30
 
 _runtime: T2MRuntime | None = None
+
+
+def _apply_mmgp(runtime: T2MRuntime):
+    """Apply MMGP memory offloading to trade speed for lower VRAM."""
+    profile = int(os.environ.get("MMGP_PROFILE", "1"))
+    if profile <= 0:
+        return
+    try:
+        from mmgp import offload
+
+        pipe = runtime.extract_models_for_mmgp()
+        if not pipe:
+            print(">>> [WARNING] No models extracted for MMGP offloading. Skipping.")
+            return
+
+        kwargs = {}
+        if profile != 1 and profile != 3:
+            kwargs["budgets"] = {"*": 4000}  # 4 GB budget for active components
+
+        verbose = int(os.environ.get("MMGP_VERBOSE", "1"))
+        print(f">>> Applying MMGP offload profile {profile}...")
+        offload.profile(pipe, profile_no=profile, verboseLevel=verbose, **kwargs)
+        print(f">>> MMGP offloading active (profile {profile}).")
+    except ImportError:
+        print(">>> [INFO] mmgp not installed. Skipping dynamic offloading.")
+    except Exception as e:
+        print(f">>> [ERROR] Failed to apply MMGP offloading: {e}")
 
 
 def get_runtime() -> T2MRuntime:
@@ -51,6 +81,7 @@ def get_runtime() -> T2MRuntime:
             prompt_engineering_host=None,
             prompt_engineering_model_path=None,
         )
+        _apply_mmgp(_runtime)
     return _runtime
 
 

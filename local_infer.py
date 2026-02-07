@@ -8,6 +8,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
 
+# ── Sensible defaults (set before any module reads these env vars) ──
+os.environ.setdefault("QWEN_QUANTIZATION", "int4")
+os.environ.setdefault("DISABLE_PROMPT_ENGINEERING", "True")
+
 from hymotion.utils.path import parse_dirs_and_sort
 from hymotion.utils.t2m_runtime import T2MRuntime
 

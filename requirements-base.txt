@@ -1,0 +1,19 @@
+# Shared deps used by both API and Gradio services
+--extra-index-url https://gitlab.inria.fr/api/v4/projects/18692/packages/pypi/simple
+huggingface_hub==0.34.0
+
+torchdiffeq==0.2.5
+accelerate==0.30.1
+diffusers==0.26.3
+transformers==4.57.6
+tokenizers==0.22.2
+einops==0.8.1
+safetensors==0.5.3
+bitsandbytes==0.48.2
+
+numpy>=1.24.0,<2.0
+scipy>=1.10.0
+
+urllib3<1.27,>=1.25.4
+openai==1.78.1
+mmgp==3.2.7

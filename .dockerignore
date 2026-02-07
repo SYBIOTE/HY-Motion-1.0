@@ -2,7 +2,6 @@
 .git
 __pycache__
 *.pyc
-.venv
 .vscode
 ckpts/*
 !ckpts/README.md
@@ -10,3 +9,15 @@ test_*
 debug
 output
 tencent
+
+# Docs & files not needed in containers
+*.md
+!ckpts/README.md
+License.txt
+.gcloudignore
+
+# Unrelated directories
+ssae/
+
+# Local-only scripts
+local_infer.py

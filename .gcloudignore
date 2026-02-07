@@ -13,7 +13,7 @@ tencent
 *.md
 !README.md
 License.txt
-QUANTIZATION_GUIDE.md
+VRAM_OPTIMIZATION_GUIDE.md
 README_zh_cn.md
 API_README.md
 DEPLOY_CLOUD_RUN.md
