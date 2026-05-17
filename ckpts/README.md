@@ -1,6 +1,6 @@
 # Model Checkpoints Download Guide
 
-This project requires several model weights to function. By default, `app.py` and `gradio_app.py` support automatic downloading from Hugging Face. However, for offline environments or faster startup, we recommend manual downloading.
+This project requires several model weights. For offline environments or faster startup (e.g. a RunPod network volume), download manually or sync from S3; see [RUNPOD.md](../RUNPOD.md).
 
 ## 1. Motion Generation Models (T2M Models)
 
