@@ -2,6 +2,8 @@
 
 JSON-only HTTP API for text-to-motion. No Gradio, no FBX; returns motion data for use by Next.js or other clients.
 
+**RunPod Serverless + network volume:** see [RUNPOD.md](RUNPOD.md).
+
 ## Endpoints
 
 | Method | Path | Description |
@@ -52,7 +54,6 @@ Shapes (single sample): `keypoints3d` [num_frames, num_joints, 3], `rot6d` [num_
 ## Run locally
 
 ```bash
-# From repo root; ensure ckpts are present (see ckpts/README.md)
 export MODEL_PATH=ckpts/tencent/HY-Motion-1.0-Lite
 export QWEN_QUANTIZATION=int4
 export DISABLE_PROMPT_ENGINEERING=True
@@ -62,42 +63,35 @@ python -m uvicorn api:app --host 0.0.0.0 --port 8080
 
 Then: `curl -X POST http://localhost:8080/v1/motion -H "Content-Type: application/json" -d '{"text":"A person waves"}'`
 
-## Docker
+## Docker (local GPU)
+
+From the `HY-Motion-1.0/` directory:
 
 ```bash
-# Build base + API (from HY-Motion-1.0 root)
-docker build --build-arg BUNDLE_CKPTS=1 -f Dockerfile.base -t hymotion-base .
-docker build --build-arg BASE_IMAGE=hymotion-base:latest -t hymotion-api .
+docker build -f Dockerfile.base -t hymotion-base .
+docker build --build-arg HYMOTION_BASE_IMAGE=hymotion-base:latest -f Dockerfile -t hymotion-api .
 
-# Slim image + named volume — first boot downloads once into the volume (HF/token as needed).
-docker build --build-arg BUNDLE_CKPTS=0 -f Dockerfile.base -t hymotion-base .
-docker build --build-arg BASE_IMAGE=hymotion-base:latest -t hymotion-api .
-docker run --gpus all -p 8080:8080 -v hymotion-ckpts:/app/ckpts hymotion-api
-
-# Host bind-mount (reuse local ckpts tree)
 docker run --gpus all -p 8080:8080 \
   -v "$(pwd)/ckpts:/app/ckpts" \
   -e MODEL_PATH=/app/ckpts/tencent/HY-Motion-1.0-Lite \
   -e CKPTS_ROOT=/app/ckpts \
   -e AUTO_DOWNLOAD_CKPTS=0 \
   hymotion-api
-
-# Cloud Build (`cloudbuild.yaml`) sets BUNDLE_CKPTS=1 by default — weights ship in the image.
 ```
 
-For **RunPod** (or any Git-connected build), the API image defaults to **`docker.io/sybiote/hymotion-base:latest`**. Change the `BASE_IMAGE` default in `Dockerfile` / `Dockerfile.gradio` if your Hub namespace differs, or pass a build-arg `BASE_IMAGE=yourname/hymotion-base:tag`. Use **build context** `HY-Motion-1.0` (monorepo subdir) so `COPY` paths resolve.
+**RunPod (Git build):** set build arg **`HYMOTION_BASE_IMAGE`** to your pushed base image if not using the Dockerfile default. Build context must be **`HY-Motion-1.0/`** in a monorepo. Details: [RUNPOD.md](RUNPOD.md).
 
 ## Environment
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | CKPTS_ROOT | /app/ckpts (Docker) | Root for motion + local Qwen + CLIP trees |
-| MODEL_PATH | (Docker) `/app/ckpts/tencent/HY-Motion-1.0-Lite`; must mirror `$CKPTS_ROOT`/tencent/…‑Lite | Derived from CKPTS_ROOT; do not point at another tree unless you sync CKPTS_ROOT |
-| AUTO_DOWNLOAD_CKPTS | 1 | On startup download missing checkpoints (set 0 when volume already filled) |
-| SKIP_CHECKPOINT_PREP | 0 | Set 1 to bypass entrypoint prefetch (dangerous unless layout is guaranteed) |
+| MODEL_PATH | `/app/ckpts/tencent/HY-Motion-1.0-Lite` in image | Must match `{CKPTS_ROOT}/tencent/HY-Motion-1.0-Lite` |
+| AUTO_DOWNLOAD_CKPTS | 1 | Set 0 when volume already has checkpoints |
+| SKIP_CHECKPOINT_PREP | 0 | 1 = skip entrypoint checkpoint step |
 | QWEN_QUANTIZATION | int4 | int4 / int8 / none |
 | DISABLE_PROMPT_ENGINEERING | True | Disable LLM rewriter (saves VRAM) |
-| USE_HF_MODELS | 1 (outside Docker) / 0 in image | HF hub IDs vs local dirs under CKPTS_ROOT |
+| USE_HF_MODELS | 1 (bare local) / 0 in image | HF hub IDs vs dirs under CKPTS_ROOT |
 
 ## Next.js integration
 

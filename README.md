@@ -29,6 +29,8 @@
 
 # HY-Motion 1.0: Scaling Flow Matching Models for 3D Motion Generation
 
+**RunPod (GPU Serverless + volume):** this branch includes [RUNPOD.md](RUNPOD.md) — Dockerfiles and deploy notes for [RunPod](https://www.runpod.io/); checkpoints are expected on a **network volume**, not baked into the image.
+
 
 <p align="center">
   <img src="./assets/teaser.jpg" alt="Teaser" width="100%">

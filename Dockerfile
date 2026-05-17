@@ -1,38 +1,25 @@
-# HY-Motion API (production)
-# Tiny layer on top of the shared base — rebuilds in seconds when only app code changes.
+# HY-Motion API (production) — RunPod branch
+# Thin layer on Dockerfile.base: FastAPI + uvicorn.
 #
-# Build (standalone — if not using the base workflow):
-#   docker build -f Dockerfile.base -t hymotion-base . && docker build -t hymotion-api .
+# Build from HY-Motion-1.0/ (monorepo subdir) so COPY paths resolve.
+# Build arg HYMOTION_BASE_IMAGE: base to extend (default: Docker Hub sybiote/hymotion-base:latest).
 #
-# Run:
+#   docker build -f Dockerfile.base -t hymotion-base .
+#   docker build --build-arg HYMOTION_BASE_IMAGE=hymotion-base:latest -f Dockerfile -t hymotion-api .
 #   docker run --gpus all -p 8080:8080 hymotion-api
-#
-# Run with persisted checkpoints:
-#   docker run --gpus all -v hymotion-ckpts:/app/ckpts -p 8080:8080 hymotion-api
-#
-# Cloud Build:
-#   gcloud builds submit --config cloudbuild.yaml --substitutions=_REGION=us-central1
-#
-# RunPod (Git build of this repo): default BASE_IMAGE is Docker Hub — no local hymotion-base tag.
-# Local builds on top of a freshly built base:
-#   docker build --build-arg BASE_IMAGE=hymotion-base:latest ...
 
-# ── Base (cloudbuild.yaml overrides with Artifact Registry) ──
-ARG BASE_IMAGE=docker.io/sybiote/hymotion-base:latest
-FROM ${BASE_IMAGE}
+ARG HYMOTION_BASE_IMAGE=docker.io/sybiote/hymotion-base:latest
+FROM ${HYMOTION_BASE_IMAGE}
 
-# ── API-specific deps (fastapi, uvicorn — lightweight) ──
 COPY requirements-api.txt .
 RUN uv pip install --system --no-cache -r requirements-api.txt
 
-# ── App code ──
 COPY api.py .
 
 ENV DISABLE_WOODEN_MESH=1
 
 EXPOSE 8080
 
-# Long start-period allows first-ever HF checkpoint sync into an empty volume.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=1200s --retries=3 \
     CMD bash -lc 'curl -fsS "http://127.0.0.1:${PORT:-8080}/health" >/dev/null || exit 1'
 

@@ -1,14 +1,10 @@
-# HY-Motion shared base image
-# Contains: CUDA runtime, Python 3.11, uv, PyTorch, shared deps.
-# Checkpoints: optional baked into the image (BUNDLE_CKPTS=1) or via volume + startup sync.
+# HY-Motion shared base image (RunPod branch — slim; checkpoints live on a network volume).
+# CUDA runtime, Python 3.11, uv, PyTorch, shared deps, entrypoint + ensure_checkpoints.
 #
-# Build (bundled checkpoints — mirrors older single-layer download):
-#   docker build --build-arg BUNDLE_CKPTS=1 -f Dockerfile.base -t hymotion-base .
+# Build:
+#   docker build -f Dockerfile.base -t hymotion-base .
 #
-# Build (slim + volume — smaller image; mounts CKPTS_ROOT, first start may HF-download):
-#   docker build --build-arg BUNDLE_CKPTS=0 -f Dockerfile.base -t hymotion-base .
-#
-# Cloud Build (see cloudbuild.yaml): passes BUNDLE_CKPTS=1 by default.
+# Weights are not baked in; mount a RunPod network volume (or S3-sync) and set CKPTS_ROOT / MODEL_PATH.
 
 ARG CUDA_VERSION=12.4.1
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
@@ -24,37 +20,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
-# Install uv for 10-50x faster pip installs
 RUN pip install uv
 
 WORKDIR /app
 
-# ── Checkpoint bootstrap / entry ──
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY scripts/ensure_checkpoints.py /app/scripts/ensure_checkpoints.py
 RUN chmod +x /app/docker-entrypoint.sh
 
-# ── Layer 1: PyTorch (heaviest, ~2.5 GB, changes rarely) ──
 COPY requirements-torch.txt .
 RUN uv pip install --system --no-cache -r requirements-torch.txt
 
-# ── Layer 2: Shared ML deps (changes occasionally) ──
 COPY requirements-base.txt .
 RUN uv pip install --system --no-cache -r requirements-base.txt
 
-# ── Layer 3: Optional baked checkpoints (Cloud Build enables this by default) ──
-ARG BUNDLE_CKPTS=0
-RUN bash -eo pipefail -c "\
-if [[ \"\$BUNDLE_CKPTS\" == \"1\" ]]; then \
-  CKPTS_ROOT=/app/ckpts AUTO_DOWNLOAD_CKPTS=1 USE_HF_MODELS=0 \
-    python scripts/ensure_checkpoints.py --bundled-build; \
-fi"
-
-# Shared app code (used by both API and Gradio)
 COPY hymotion/ hymotion/
 COPY stats/ stats/
 
-# Sensible defaults (override CKPTS_ROOT for RunPod volumes, e.g. /runpod-volume/ckpts)
 ENV CKPTS_ROOT=/app/ckpts \
     MODEL_PATH=/app/ckpts/tencent/HY-Motion-1.0-Lite \
     QWEN_QUANTIZATION=int4 \
