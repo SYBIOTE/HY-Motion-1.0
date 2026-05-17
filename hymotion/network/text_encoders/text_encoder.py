@@ -27,12 +27,15 @@ from .model_constants import PROMPT_TEMPLATE_ENCODE_HUMAN_MOTION
 
 USE_HF_MODELS = os.environ.get("USE_HF_MODELS", "0") == "1"
 
+# Local encoder weights layout: {CKPTS_ROOT}/Qwen3-8B and {CKPTS_ROOT}/clip-vit-large-patch14 (Docker/HF volume).
+_ckpts_root = os.environ.get("CKPTS_ROOT", "ckpts")
+
 if USE_HF_MODELS:
     QWEN_PATH = "Qwen/Qwen3-8B"
     CLIP_PATH = "openai/clip-vit-large-patch14"
 else:
-    QWEN_PATH = "ckpts/Qwen3-8B"
-    CLIP_PATH = "ckpts/clip-vit-large-patch14"
+    QWEN_PATH = os.path.join(_ckpts_root, "Qwen3-8B")
+    CLIP_PATH = os.path.join(_ckpts_root, "clip-vit-large-patch14")
 
 LLM_ENCODER_LAYOUT = {
     "qwen3": {

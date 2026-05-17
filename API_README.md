@@ -65,24 +65,39 @@ Then: `curl -X POST http://localhost:8080/v1/motion -H "Content-Type: applicatio
 ## Docker
 
 ```bash
-# Build (from repo root)
-docker build -f Dockerfile.api -t hymotion-api .
+# Build base + API (from HY-Motion-1.0 root)
+docker build --build-arg BUNDLE_CKPTS=1 -f Dockerfile.base -t hymotion-base .
+docker build --build-arg BASE_IMAGE=hymotion-base:latest -t hymotion-api .
 
-# Run with GPU; mount ckpts or set MODEL_PATH to path inside container
+# Slim image + named volume — first boot downloads once into the volume (HF/token as needed).
+docker build --build-arg BUNDLE_CKPTS=0 -f Dockerfile.base -t hymotion-base .
+docker build --build-arg BASE_IMAGE=hymotion-base:latest -t hymotion-api .
+docker run --gpus all -p 8080:8080 -v hymotion-ckpts:/app/ckpts hymotion-api
+
+# Host bind-mount (reuse local ckpts tree)
 docker run --gpus all -p 8080:8080 \
-  -v $(pwd)/ckpts:/app/ckpts \
+  -v "$(pwd)/ckpts:/app/ckpts" \
   -e MODEL_PATH=/app/ckpts/tencent/HY-Motion-1.0-Lite \
+  -e CKPTS_ROOT=/app/ckpts \
+  -e AUTO_DOWNLOAD_CKPTS=0 \
   hymotion-api
+
+# Cloud Build (`cloudbuild.yaml`) sets BUNDLE_CKPTS=1 by default — weights ship in the image.
 ```
+
+For **RunPod** (or any Git-connected build), the API image defaults to **`docker.io/sybiote/hymotion-base:latest`**. Change the `BASE_IMAGE` default in `Dockerfile` / `Dockerfile.gradio` if your Hub namespace differs, or pass a build-arg `BASE_IMAGE=yourname/hymotion-base:tag`. Use **build context** `HY-Motion-1.0` (monorepo subdir) so `COPY` paths resolve.
 
 ## Environment
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| MODEL_PATH | ckpts/tencent/HY-Motion-1.0-Lite | Directory with config.yml and latest.ckpt |
+| CKPTS_ROOT | /app/ckpts (Docker) | Root for motion + local Qwen + CLIP trees |
+| MODEL_PATH | (Docker) `/app/ckpts/tencent/HY-Motion-1.0-Lite`; must mirror `$CKPTS_ROOT`/tencent/…‑Lite | Derived from CKPTS_ROOT; do not point at another tree unless you sync CKPTS_ROOT |
+| AUTO_DOWNLOAD_CKPTS | 1 | On startup download missing checkpoints (set 0 when volume already filled) |
+| SKIP_CHECKPOINT_PREP | 0 | Set 1 to bypass entrypoint prefetch (dangerous unless layout is guaranteed) |
 | QWEN_QUANTIZATION | int4 | int4 / int8 / none |
 | DISABLE_PROMPT_ENGINEERING | True | Disable LLM rewriter (saves VRAM) |
-| USE_HF_MODELS | 1 | Use Hugging Face model paths |
+| USE_HF_MODELS | 1 (outside Docker) / 0 in image | HF hub IDs vs local dirs under CKPTS_ROOT |
 
 ## Next.js integration
 
