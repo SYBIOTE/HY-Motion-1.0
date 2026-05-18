@@ -9,6 +9,7 @@ JSON-only HTTP API for text-to-motion. No Gradio, no FBX; returns motion data fo
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Liveness; returns `{"status":"ok"}` |
+| GET | `/ping` | Same as health for platforms that expect `/ping` (e.g. RunPod); lightweight, HTTP 200 |
 | POST | `/v1/motion` | Generate motion from text; returns `{ motion, meta }` |
 
 ## POST /v1/motion

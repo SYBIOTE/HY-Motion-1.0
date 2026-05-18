@@ -1,6 +1,6 @@
 """
 HY-Motion microservice: JSON-only API for text-to-motion.
-Exposes POST /v1/motion and GET /health for use by Next.js or other clients.
+Exposes POST /v1/motion, GET /health, and GET /ping (RunPod liveness; 200, no model load).
 
 Usage:
     MODEL_PATH=ckpts/tencent/HY-Motion-1.0-Lite python -m uvicorn api:app --host 0.0.0.0 --port 8080
@@ -123,6 +123,12 @@ class MotionRequest(BaseModel):
 
 @app.get("/health")
 def health():
+    return {"status": "ok"}
+
+
+@app.get("/ping")
+def ping():
+    """Lightweight probe (e.g. RunPod). Always 200; does not load the motion model."""
     return {"status": "ok"}
 
 

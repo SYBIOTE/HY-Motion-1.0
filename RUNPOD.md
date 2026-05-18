@@ -46,6 +46,8 @@ In **RunPod → Git / Docker build**, set the same **build argument** name: **`H
 
 4. Point the worker image at your pushed **`hymotion-api`** image.
 
+**HTTP probes:** `GET /ping` and `GET /health` both return **200** with `{"status":"ok"}` (`/ping` is for RunPod-style checks; neither route loads the model per request).
+
 Private registry: add pull credentials in RunPod if needed.
 
 ## References
