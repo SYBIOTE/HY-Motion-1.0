@@ -33,7 +33,7 @@ In **RunPod → Git / Docker build**, set the same **build argument** name: **`H
 
 ## RunPod Serverless
 
-1. **Seed** the network volume (S3 sync or one-time download) so it contains `tencent/HY-Motion-1.0-Lite/`, `Qwen3-8B/`, `clip-vit-large-patch14/` under your chosen prefix (e.g. `ckpts/`). See `ckpts/README.md`.
+1. **Seed** the network volume (S3 sync or one-time download) so it contains `tencent/HY-Motion-1.0-Lite/`, `Qwen3-8B/`, `clip-vit-large-patch14/` under your chosen prefix (e.g. `ckpts/`). See `ckpts/README.md`. The worker **exits on startup** if checkpoints are missing.
 2. Attach that **network volume** to the endpoint (same datacenter/region as the volume).
 3. **Environment** (example when the mount is `/runpod-volume` and data is under `ckpts/`):
 
@@ -42,7 +42,6 @@ In **RunPod → Git / Docker build**, set the same **build argument** name: **`H
    | `CKPTS_ROOT` | `/runpod-volume/ckpts` |
    | `MODEL_PATH` | `/runpod-volume/ckpts/tencent/HY-Motion-1.0-Lite` |
    | `USE_HF_MODELS` | `0` |
-   | `AUTO_DOWNLOAD_CKPTS` | `0` (after volume is full) |
 
 4. Point the worker image at your pushed **`hymotion-api`** image.
 

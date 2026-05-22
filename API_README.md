@@ -76,7 +76,6 @@ docker run --gpus all -p 8080:8080 \
   -v "$(pwd)/ckpts:/app/ckpts" \
   -e MODEL_PATH=/app/ckpts/tencent/HY-Motion-1.0-Lite \
   -e CKPTS_ROOT=/app/ckpts \
-  -e AUTO_DOWNLOAD_CKPTS=0 \
   hymotion-api
 ```
 
@@ -86,9 +85,8 @@ docker run --gpus all -p 8080:8080 \
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| CKPTS_ROOT | /app/ckpts (Docker) | Root for motion + local Qwen + CLIP trees |
+| CKPTS_ROOT | /app/ckpts (Docker) | Root for motion + local Qwen + CLIP trees; must be populated (volume mount) |
 | MODEL_PATH | `/app/ckpts/tencent/HY-Motion-1.0-Lite` in image | Must match `{CKPTS_ROOT}/tencent/HY-Motion-1.0-Lite` |
-| AUTO_DOWNLOAD_CKPTS | 1 | Set 0 when volume already has checkpoints |
 | SKIP_CHECKPOINT_PREP | 0 | 1 = skip entrypoint checkpoint step |
 | QWEN_QUANTIZATION | int4 | int4 / int8 / none |
 | DISABLE_PROMPT_ENGINEERING | True | Disable LLM rewriter (saves VRAM) |

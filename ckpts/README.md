@@ -47,7 +47,7 @@ huggingface-cli download Text2MotionPrompter/Text2MotionPrompter --local-dir ckp
 
 ## Recommended Directory Structure
 
-Docker / RunPod: set **`CKPTS_ROOT`** to where the volume mounts (defaults to `/app/ckpts`); **`MODEL_PATH`** must stay `${CKPTS_ROOT}/tencent/HY-Motion-1.0-Lite`. Optionally set **`AUTO_DOWNLOAD_CKPTS=0`** once the folder is populated to skip Hugging Face on boot.
+Docker / RunPod: set **`CKPTS_ROOT`** to where the volume mounts (defaults to `/app/ckpts`); **`MODEL_PATH`** must stay `${CKPTS_ROOT}/tencent/HY-Motion-1.0-Lite`. The container **exits on startup** if required files are missing — seed the volume before deploy (see [RUNPOD.md](../RUNPOD.md)).
 
 If you prefer local loading (recommended for stability), your ``ckpts/`` directory should look like this:
 

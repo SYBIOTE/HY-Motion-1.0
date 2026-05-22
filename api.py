@@ -8,7 +8,6 @@ Usage:
 Env:
     MODEL_PATH: Directory containing config.yml and latest.ckpt (default under CKPTS_ROOT: .../tencent/HY-Motion-1.0-Lite)
     CKPTS_ROOT: Root for volume-mounted weights; Qwen/CLIP live beside tencent/. Default in Docker: /app/ckpts
-    AUTO_DOWNLOAD_CKPTS: If 1, fetch missing checkpoints on startup (needs HF access). Disable on air-gapped / pre-filled volumes (0).
     SKIP_CHECKPOINT_PREP: If 1, skip docker-entrypoint checkpoint step (advanced).
     DISABLE_PROMPT_ENGINEERING: Set to True to disable LLM prompt rewriter (saves VRAM)
     QWEN_QUANTIZATION: int4 | int8 | none (default: int4 for low VRAM)

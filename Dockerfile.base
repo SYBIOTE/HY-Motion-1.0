@@ -44,7 +44,6 @@ ENV CKPTS_ROOT=/app/ckpts \
     USE_HF_MODELS=0 \
     MMGP_PROFILE=1 \
     MMGP_VERBOSE=1 \
-    PORT=8080 \
-    AUTO_DOWNLOAD_CKPTS=1
+    PORT=8080
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
