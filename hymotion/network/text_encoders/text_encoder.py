@@ -37,6 +37,28 @@ else:
     QWEN_PATH = os.path.join(_ckpts_root, "Qwen3-8B")
     CLIP_PATH = os.path.join(_ckpts_root, "clip-vit-large-patch14")
 
+# Pre-quantized int4 encoder, written once by scripts/prequantize_qwen.py.
+# Quantizing at load costs ~48s per cold start reading 16GB of fp16 shards off
+# the volume; the result is deterministic, so a saved copy (~5GB) skips both the
+# reads and the quantization. Optional: absent, we fall back to quantizing here.
+QWEN_INT4_PATH = os.environ.get(
+    "QWEN_INT4_PATH", os.path.join(_ckpts_root, "Qwen3-8B-int4")
+)
+
+
+def _prequantized_qwen_dir() -> Optional[str]:
+    """Path to the saved int4 encoder, when it is present and looks complete."""
+    if USE_HF_MODELS or os.environ.get("QWEN_QUANTIZATION", "int4").lower() != "int4":
+        return None
+    if not os.path.isdir(QWEN_INT4_PATH):
+        return None
+    if not os.path.exists(os.path.join(QWEN_INT4_PATH, "config.json")):
+        return None
+    has_weights = any(
+        name.endswith((".safetensors", ".bin")) for name in os.listdir(QWEN_INT4_PATH)
+    )
+    return QWEN_INT4_PATH if has_weights else None
+
 LLM_ENCODER_LAYOUT = {
     "qwen3": {
         "module_path": QWEN_PATH,
@@ -120,9 +142,21 @@ class HYTextModel(nn.Module):
 
             # Configure quantization based on environment variable
             quantization = os.environ.get("QWEN_QUANTIZATION", "int4").lower()
-            print(f">>> Loading Qwen3-8B with quantization: {quantization}")
+            prequantized = _prequantized_qwen_dir()
 
-            if quantization == "int4":
+            if prequantized:
+                # Already int4: the quantization config travels in its config.json.
+                print(f">>> Loading pre-quantized Qwen3-8B (int4) from {prequantized}")
+                self.llm_text_encoder = LLM_ENCODER_LAYOUT[llm_type][
+                    "text_encoder_class"
+                ].from_pretrained(
+                    prequantized,
+                    device_map="auto",
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True,
+                )
+            elif quantization == "int4":
+                print(f">>> Loading Qwen3-8B with quantization: {quantization}")
                 from transformers import BitsAndBytesConfig
                 bnb_config = BitsAndBytesConfig(
                     load_in_4bit=True,
@@ -138,6 +172,7 @@ class HYTextModel(nn.Module):
                     trust_remote_code=True,
                 )
             elif quantization == "int8":
+                print(f">>> Loading Qwen3-8B with quantization: {quantization}")
                 from transformers import BitsAndBytesConfig
                 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
                 self.llm_text_encoder = LLM_ENCODER_LAYOUT[llm_type]["text_encoder_class"].from_pretrained(
@@ -148,6 +183,7 @@ class HYTextModel(nn.Module):
                     trust_remote_code=True,
                 )
             else:  # quantization == "none"
+                print(f">>> Loading Qwen3-8B with quantization: {quantization}")
                 self.llm_text_encoder = LLM_ENCODER_LAYOUT[llm_type]["text_encoder_class"].from_pretrained(
                     LLM_ENCODER_LAYOUT[llm_type]["module_path"],
                     low_cpu_mem_usage=True,

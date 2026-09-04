@@ -134,6 +134,26 @@ base image if not using the Dockerfile default. Build context must be
 | QWEN_QUANTIZATION | int4 | int4 / int8 / none |
 | DISABLE_PROMPT_ENGINEERING | True | Disable LLM rewriter (saves VRAM) |
 | USE_HF_MODELS | 1 (bare local) / 0 in image | HF hub IDs vs dirs under CKPTS_ROOT |
+| QWEN_INT4_PATH | `{CKPTS_ROOT}/Qwen3-8B-int4` | Pre-quantized encoder; used when present (see below) |
+
+## Cold start
+
+A worker loads the model once at start, so the cost is per worker rather than
+per job. Of a ~70s start, ~48s is the Qwen3-8B text encoder: 16GB of fp16
+shards read off the network volume and quantized to int4 on every boot, for a
+result that is identical each time.
+
+Write that result once instead:
+
+```bash
+CKPTS_ROOT=/runpod-volume/ckpts python scripts/prequantize_qwen.py
+```
+
+That saves a ~5GB int4 copy to `{CKPTS_ROOT}/Qwen3-8B-int4`, which workers then
+load directly — roughly 48s down to 12-15s. Needs a GPU (bitsandbytes quantizes
+on-device); run it on a pod with the volume attached. The step is optional: with
+no such directory the encoder quantizes at load exactly as before, and
+`QWEN_QUANTIZATION=none` or `int8` bypasses it entirely.
 
 ## Next.js integration
 

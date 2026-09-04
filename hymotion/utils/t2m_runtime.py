@@ -347,24 +347,37 @@ class T2MRuntime:
             self._release_pipeline(pi)
 
         ts = _now()
-        save_data, base_filename = save_visualization_data(
-            output=model_output,
-            text=text if original_text is None else original_text,
-            rewritten_text=text,
-            timestamp=ts,
-            output_dir=output_dir,
-            output_filename=output_filename,
-        )
 
-        html_content = self._generate_html_content(
-            timestamp=ts,
-            file_path=base_filename,
-            output_dir=output_dir,
-        )
-
+        # Resolve the format before deciding what to build: an fbx request
+        # without the SDK degrades to dict, and should not pay for artifacts
+        # it will not return either.
         if output_format == "fbx" and not self.fbx_available:
             print(">>> Warning: FBX export requested but FBX SDK is not available. Falling back to dict format.")
             output_format = "dict"
+
+        # The dict caller (the API/queue handler) discards both of these and
+        # returns model_output directly, so skip the NPZ write and the HTML
+        # render for it — the latter needs SMPL data the dict path never
+        # produces, and raised on every request.
+        wants_artifacts = output_format != "dict"
+
+        if wants_artifacts:
+            save_data, base_filename = save_visualization_data(
+                output=model_output,
+                text=text if original_text is None else original_text,
+                rewritten_text=text,
+                timestamp=ts,
+                output_dir=output_dir,
+                output_filename=output_filename,
+            )
+
+            html_content = self._generate_html_content(
+                timestamp=ts,
+                file_path=base_filename,
+                output_dir=output_dir,
+            )
+        else:
+            save_data, html_content = None, None
 
         if output_format == "fbx" and self.fbx_available:
             fbx_files = self._generate_fbx_files(
