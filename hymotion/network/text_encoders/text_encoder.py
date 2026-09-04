@@ -76,46 +76,18 @@ def _prequantized_qwen_dir() -> Optional[str]:
     return QWEN_INT4_PATH
 
 
-# The slow (use_fast=False) BPE tokenizer reads these directly; save_pretrained
-# writes only the fast tokenizer.json, so an int4 directory saved from a model
-# does not carry them and the slow path gets None for the vocab file
-# ("expected str, bytes or os.PathLike object, not NoneType").
-_SLOW_TOKENIZER_FILES = ("vocab.json", "merges.txt")
-
-
 def _qwen_tokenizer_dir(default_path: str) -> str:
     """
     Where to load the Qwen tokenizer from.
 
-    Quantization does not change the tokenizer, so any complete copy will do.
-    Prefer whichever directory actually holds the files the slow tokenizer
-    needs: the original fp16 directory when it is still present, otherwise the
-    int4 copy — which is the only one left once the fp16 shards are dropped.
+    Quantization leaves the tokenizer untouched, so either copy serves. Prefer
+    the original directory when it is still there, and fall back to the int4
+    one, which is all that remains once the fp16 shards are dropped.
     """
-
-    def _complete(path: str) -> bool:
-        return os.path.isdir(path) and all(
-            os.path.exists(os.path.join(path, name)) for name in _SLOW_TOKENIZER_FILES
-        )
-
-    if _complete(default_path):
-        return default_path
-
-    prequantized = _prequantized_qwen_dir()
-    if prequantized and _complete(prequantized):
-        return prequantized
-
-    # Neither is complete: prefer whichever exists at all and let
-    # from_pretrained report precisely what is missing.
     if os.path.isdir(default_path):
         return default_path
-    if prequantized:
-        print(
-            f">>> [int4] {prequantized} is missing {list(_SLOW_TOKENIZER_FILES)}; "
-            "copy them from the fp16 directory or re-run scripts/prequantize_qwen.py"
-        )
-        return prequantized
-    return default_path
+    prequantized = _prequantized_qwen_dir()
+    return prequantized or default_path
 
 LLM_ENCODER_LAYOUT = {
     "qwen3": {
@@ -194,7 +166,12 @@ class HYTextModel(nn.Module):
             self.llm_tokenizer = LLM_ENCODER_LAYOUT[llm_type]["tokenizer_class"].from_pretrained(
                 _qwen_tokenizer_dir(LLM_ENCODER_LAYOUT[llm_type]["module_path"]),
                 padding_side="right",
-                use_fast=False,  # Workaround for tokenizers library compatibility issue
+                # Fast tokenizer reads tokenizer.json, which save_pretrained
+                # writes, so the int4 directory stands alone; the slow path
+                # needs vocab.json/merges.txt, which it does not. Verified to
+                # produce identical ids on transformers 4.57 / tokenizers 0.22,
+                # including through apply_chat_template.
+                use_fast=True,
                 trust_remote_code=True,
             )
 
