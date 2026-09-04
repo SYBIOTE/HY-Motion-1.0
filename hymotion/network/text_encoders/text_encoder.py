@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -89,6 +90,34 @@ def _qwen_tokenizer_dir(default_path: str) -> str:
     prequantized = _prequantized_qwen_dir()
     return prequantized or default_path
 
+
+def _repair_tokenizer_config(tokenizer_dir: str) -> None:
+    """
+    Normalise extra_special_tokens in a saved tokenizer config.
+
+    save_pretrained writes it as a list, but transformers calls .keys() on it
+    when loading, so a directory produced that way raises "'list' object has no
+    attribute 'keys'" before the encoder ever runs. prequantize_qwen.py fixes
+    this at save time; repair it here too so an older int4 directory still
+    loads instead of taking the worker down.
+    """
+    cfg_path = os.path.join(tokenizer_dir, "tokenizer_config.json")
+    if not os.path.exists(cfg_path):
+        return
+    try:
+        with open(cfg_path) as fh:
+            cfg = json.load(fh)
+        extra = cfg.get("extra_special_tokens")
+        if not isinstance(extra, list):
+            return
+        cfg["extra_special_tokens"] = {}
+        cfg.setdefault("additional_special_tokens", extra)
+        with open(cfg_path, "w") as fh:
+            json.dump(cfg, fh, indent=1, ensure_ascii=False)
+        print(f">>> [int4] normalised extra_special_tokens in {cfg_path}")
+    except Exception as e:  # noqa: BLE001 - best effort; the load reports the real error
+        print(f">>> [int4] could not repair {cfg_path}: {e}")
+
 LLM_ENCODER_LAYOUT = {
     "qwen3": {
         "module_path": QWEN_PATH,
@@ -163,8 +192,10 @@ class HYTextModel(nn.Module):
             assert llm_type in LLM_ENCODER_LAYOUT, f"Unsupported LLM type: {llm_type}"
             self._orig_max_length_llm = max_length_llm
             self.enable_llm_padding = enable_llm_padding
+            tokenizer_dir = _qwen_tokenizer_dir(LLM_ENCODER_LAYOUT[llm_type]["module_path"])
+            _repair_tokenizer_config(tokenizer_dir)
             self.llm_tokenizer = LLM_ENCODER_LAYOUT[llm_type]["tokenizer_class"].from_pretrained(
-                _qwen_tokenizer_dir(LLM_ENCODER_LAYOUT[llm_type]["module_path"]),
+                tokenizer_dir,
                 padding_side="right",
                 # Fast tokenizer reads tokenizer.json, which save_pretrained
                 # writes, so the int4 directory stands alone; the slow path

@@ -16,6 +16,7 @@ Needs a GPU: bitsandbytes quantizes on-device.
 """
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -121,14 +122,32 @@ def main() -> int:
     except Exception as e:  # noqa: BLE001 - tokenizer copy is a convenience
         print(f">>> [WARNING] Could not copy tokenizer: {e}")
 
-    # save_pretrained emits the fast tokenizer.json but not the raw BPE files,
-    # and the encoder loads the tokenizer with use_fast=False, which reads these
-    # directly. Without them the slow path gets None for the vocab file.
-    for name in ("vocab.json", "merges.txt"):
-        src_file = os.path.join(src, name)
-        if os.path.exists(src_file) and not os.path.exists(os.path.join(dst, name)):
-            shutil.copy2(src_file, os.path.join(dst, name))
-            print(f">>> Copied {name}")
+    # Round-tripping the tokenizer through save_pretrained writes
+    # extra_special_tokens as a list, while transformers expects a mapping and
+    # does `extra_special_tokens.keys()` on load ("'list' object has no
+    # attribute 'keys'"). Normalise it rather than shipping a config that only
+    # fails at worker start.
+    tok_cfg_path = os.path.join(dst, "tokenizer_config.json")
+    if os.path.exists(tok_cfg_path):
+        with open(tok_cfg_path) as fh:
+            tok_cfg = json.load(fh)
+        extra = tok_cfg.get("extra_special_tokens")
+        if isinstance(extra, list):
+            tok_cfg["extra_special_tokens"] = {}
+            tok_cfg.setdefault("additional_special_tokens", extra)
+            with open(tok_cfg_path, "w") as fh:
+                json.dump(tok_cfg, fh, indent=1, ensure_ascii=False)
+            print(">>> Normalised extra_special_tokens (list -> mapping)")
+
+    # Fail here rather than at worker start if the saved tokenizer cannot load.
+    try:
+        AutoTokenizer.from_pretrained(
+            dst, padding_side="right", use_fast=True, trust_remote_code=True
+        )
+        print(">>> Verified: the saved tokenizer loads")
+    except Exception as e:  # noqa: BLE001 - surfaced as a hard failure below
+        print(f"ERROR: saved tokenizer does not load: {e}", file=sys.stderr)
+        return 1
 
     print(f">>> Saved in {time.time() - t1:.1f}s")
 
