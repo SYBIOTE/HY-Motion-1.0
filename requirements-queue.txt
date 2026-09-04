@@ -5,3 +5,9 @@
 # (dependency_versions_check). Hold the hub on the range transformers accepts.
 runpod>=1.7.0
 huggingface-hub>=0.34.0,<1.0
+
+# The Qwen tokenizer is loaded with use_fast=False, and the slow path converts
+# the SentencePiece model through protobuf. It is only ever a transitive
+# dependency here, so it can vanish on a resolve — pin it so the tokenizer
+# cannot fail with "requires the protobuf library but it was not found".
+protobuf>=3.20,<6
