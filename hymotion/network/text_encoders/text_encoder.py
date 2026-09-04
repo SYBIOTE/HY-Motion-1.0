@@ -47,17 +47,32 @@ QWEN_INT4_PATH = os.environ.get(
 
 
 def _prequantized_qwen_dir() -> Optional[str]:
-    """Path to the saved int4 encoder, when it is present and looks complete."""
-    if USE_HF_MODELS or os.environ.get("QWEN_QUANTIZATION", "int4").lower() != "int4":
+    """
+    Path to the saved int4 encoder, when it is present and looks complete.
+
+    Logs why it declines: falling back silently means quantizing 16GB of fp16
+    shards at every cold start, or — once those are deleted — failing in
+    from_pretrained with an opaque "Repo id must be in the form" error, since a
+    missing local path is treated as a hub repo id.
+    """
+    quantization = os.environ.get("QWEN_QUANTIZATION", "int4").lower()
+    if USE_HF_MODELS:
+        print(">>> [int4] skipped: USE_HF_MODELS=1")
+        return None
+    if quantization != "int4":
+        print(f">>> [int4] skipped: QWEN_QUANTIZATION={quantization!r}")
         return None
     if not os.path.isdir(QWEN_INT4_PATH):
+        print(f">>> [int4] not a directory: {QWEN_INT4_PATH}")
         return None
+    entries = os.listdir(QWEN_INT4_PATH)
     if not os.path.exists(os.path.join(QWEN_INT4_PATH, "config.json")):
+        print(f">>> [int4] no config.json in {QWEN_INT4_PATH}; contains {sorted(entries)[:8]}")
         return None
-    has_weights = any(
-        name.endswith((".safetensors", ".bin")) for name in os.listdir(QWEN_INT4_PATH)
-    )
-    return QWEN_INT4_PATH if has_weights else None
+    if not any(name.endswith((".safetensors", ".bin")) for name in entries):
+        print(f">>> [int4] no weights in {QWEN_INT4_PATH}; contains {sorted(entries)[:8]}")
+        return None
+    return QWEN_INT4_PATH
 
 
 def _qwen_tokenizer_dir(default_path: str) -> str:
