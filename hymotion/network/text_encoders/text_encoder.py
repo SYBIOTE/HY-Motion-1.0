@@ -72,6 +72,7 @@ def _prequantized_qwen_dir() -> Optional[str]:
     if not any(name.endswith((".safetensors", ".bin")) for name in entries):
         print(f">>> [int4] no weights in {QWEN_INT4_PATH}; contains {sorted(entries)[:8]}")
         return None
+    print(f">>> [int4] using pre-quantized encoder at {QWEN_INT4_PATH}")
     return QWEN_INT4_PATH
 
 
