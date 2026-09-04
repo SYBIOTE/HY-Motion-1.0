@@ -16,6 +16,11 @@ FROM ${HYMOTION_BASE_IMAGE}
 COPY requirements-queue.txt .
 RUN uv pip install --system --no-cache -r requirements-queue.txt
 
+# ensure_checkpoints.py is baked into the base image, so the base's stale copy
+# runs at the entrypoint unless it is overwritten here — an edit on this branch
+# would otherwise never reach a running container.
+COPY scripts/ensure_checkpoints.py /app/scripts/ensure_checkpoints.py
+
 COPY api.py handler.py ./
 
 ENV DISABLE_WOODEN_MESH=1

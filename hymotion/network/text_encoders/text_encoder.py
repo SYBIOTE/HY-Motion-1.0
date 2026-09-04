@@ -59,6 +59,25 @@ def _prequantized_qwen_dir() -> Optional[str]:
     )
     return QWEN_INT4_PATH if has_weights else None
 
+
+def _qwen_tokenizer_dir(default_path: str) -> str:
+    """
+    Where to load the Qwen tokenizer from.
+
+    Once the fp16 weights are dropped in favour of the int4 copy, the original
+    directory is gone, and from_pretrained treats a non-existent path as a hub
+    repo id ("Repo id must be in the form 'repo_name'..."). prequantize_qwen.py
+    saves the tokenizer beside the int4 weights, so prefer that directory when
+    it carries one; fall back to the original otherwise, since the tokenizer is
+    unchanged by quantization and either copy is equivalent.
+    """
+    prequantized = _prequantized_qwen_dir()
+    if prequantized and os.path.exists(
+        os.path.join(prequantized, "tokenizer_config.json")
+    ):
+        return prequantized
+    return default_path
+
 LLM_ENCODER_LAYOUT = {
     "qwen3": {
         "module_path": QWEN_PATH,
@@ -134,7 +153,7 @@ class HYTextModel(nn.Module):
             self._orig_max_length_llm = max_length_llm
             self.enable_llm_padding = enable_llm_padding
             self.llm_tokenizer = LLM_ENCODER_LAYOUT[llm_type]["tokenizer_class"].from_pretrained(
-                LLM_ENCODER_LAYOUT[llm_type]["module_path"],
+                _qwen_tokenizer_dir(LLM_ENCODER_LAYOUT[llm_type]["module_path"]),
                 padding_side="right",
                 use_fast=False,  # Workaround for tokenizers library compatibility issue
                 trust_remote_code=True,
