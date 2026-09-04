@@ -16,9 +16,10 @@ FROM ${HYMOTION_BASE_IMAGE}
 COPY requirements-queue.txt .
 RUN uv pip install --system --no-cache -r requirements-queue.txt
 
-# ensure_checkpoints.py is baked into the base image, so the base's stale copy
-# runs at the entrypoint unless it is overwritten here — an edit on this branch
-# would otherwise never reach a running container.
+# The base image bakes hymotion/ and scripts/ as of whenever it was last built,
+# so anything this branch changes in them is invisible at runtime unless it is
+# copied again here. Overwrite both, or edits silently never reach a worker.
+COPY hymotion/ hymotion/
 COPY scripts/ensure_checkpoints.py /app/scripts/ensure_checkpoints.py
 
 COPY api.py handler.py ./
