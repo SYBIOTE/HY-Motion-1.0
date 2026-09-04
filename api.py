@@ -1,9 +1,12 @@
 """
-HY-Motion microservice: JSON-only API for text-to-motion.
-Exposes POST /v1/motion, GET /health, and GET /ping (RunPod liveness; 200, no model load).
+HY-Motion text-to-motion runtime.
+
+Transport-agnostic: holds model loading and generation, and is driven by
+handler.py, the RunPod queue worker. Importing this module must not start a
+server or bind a port.
 
 Usage:
-    MODEL_PATH=ckpts/tencent/HY-Motion-1.0-Lite python -m uvicorn api:app --host 0.0.0.0 --port 8080
+    MODEL_PATH=ckpts/tencent/HY-Motion-1.0-Lite python -u handler.py
 
 Env:
     MODEL_PATH: Directory containing config.yml and latest.ckpt (default under CKPTS_ROOT: .../tencent/HY-Motion-1.0-Lite)
@@ -18,9 +21,7 @@ Env:
 
 import os
 import tempfile
-from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 # Set env before importing runtime (for quantization, etc.)
@@ -99,20 +100,6 @@ def _tensor_to_list(x):
     return x.tolist()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Optional: preload runtime on startup (can remove to lazy-load on first request)
-    try:
-        get_runtime()
-    except Exception as e:
-        print(f">>> [WARNING] Runtime not loaded at startup: {e}")
-    yield
-    # Shutdown: nothing to close for now
-
-
-app = FastAPI(title="HY-Motion API", version="1.0", lifespan=lifespan)
-
-
 class MotionRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
     duration: float = Field(default=3.0, ge=0.5, le=30.0)
@@ -120,25 +107,14 @@ class MotionRequest(BaseModel):
     cfg_scale: float = Field(default=5.0, ge=1.0, le=20.0)
 
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-@app.get("/ping")
-def ping():
-    """Lightweight probe (e.g. RunPod). Always 200; does not load the motion model."""
-    return {"status": "ok"}
-
-
 class MotionUnavailable(Exception):
-    """Runtime could not be loaded, or generation failed. Maps to HTTP 503."""
+    """Runtime could not be loaded, or generation failed."""
 
 
 def run_motion(req: "MotionRequest") -> dict:
     """
-    Transport-agnostic text-to-motion. Shared by the FastAPI route and the
-    RunPod queue handler (handler.py); raises MotionUnavailable, never HTTPException.
+    Text-to-motion generation. Called by the RunPod queue handler
+    (handler.py); raises MotionUnavailable on any failure.
     """
     try:
         runtime = get_runtime()
@@ -183,11 +159,3 @@ def run_motion(req: "MotionRequest") -> dict:
         "seed": req.seed,
     }
     return {"motion": motion, "meta": meta}
-
-
-@app.post("/v1/motion")
-def generate_motion(req: MotionRequest):
-    try:
-        return run_motion(req)
-    except MotionUnavailable as e:
-        raise HTTPException(status_code=503, detail=str(e))

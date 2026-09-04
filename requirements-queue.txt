@@ -1,4 +1,7 @@
-# RunPod queue-endpoint worker (handler.py). Adds the job-queue SDK on top of
-# the API deps; uvicorn stays for local Docker and the load-balancer image.
--r requirements-api.txt
+# RunPod queue-endpoint worker (handler.py).
+#
+# runpod does not depend on huggingface-hub, but installing it unpinned lets the
+# resolver pull hub >=1.0, which transformers 4.57 rejects at import
+# (dependency_versions_check). Hold the hub on the range transformers accepts.
 runpod>=1.7.0
+huggingface-hub>=0.34.0,<1.0
