@@ -131,14 +131,21 @@ def ping():
     return {"status": "ok"}
 
 
-@app.post("/v1/motion")
-def generate_motion(req: MotionRequest):
+class MotionUnavailable(Exception):
+    """Runtime could not be loaded, or generation failed. Maps to HTTP 503."""
+
+
+def run_motion(req: "MotionRequest") -> dict:
+    """
+    Transport-agnostic text-to-motion. Shared by the FastAPI route and the
+    RunPod queue handler (handler.py); raises MotionUnavailable, never HTTPException.
+    """
     try:
         runtime = get_runtime()
     except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=f"Model not available: {e}")
+        raise MotionUnavailable(f"Model not available: {e}") from e
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {e}")
+        raise MotionUnavailable(f"Service unavailable: {e}") from e
 
     with tempfile.TemporaryDirectory(prefix="hymotion_") as tmpdir:
         try:
@@ -152,7 +159,7 @@ def generate_motion(req: MotionRequest):
                 original_text=req.text,
             )
         except Exception as e:
-            raise HTTPException(status_code=503, detail=f"Generation failed: {e}")
+            raise MotionUnavailable(f"Generation failed: {e}") from e
 
     # model_output: dict with keypoints3d, rot6d, transl, root_rotations_mat, text (tensors, batch dim first)
     keypoints3d = model_output["keypoints3d"]
@@ -176,3 +183,11 @@ def generate_motion(req: MotionRequest):
         "seed": req.seed,
     }
     return {"motion": motion, "meta": meta}
+
+
+@app.post("/v1/motion")
+def generate_motion(req: MotionRequest):
+    try:
+        return run_motion(req)
+    except MotionUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))

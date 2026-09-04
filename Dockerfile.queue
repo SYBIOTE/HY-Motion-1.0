@@ -1,0 +1,21 @@
+# HY-Motion — RunPod queue (serverless) worker.
+#
+# Same base image and weights as Dockerfile; the only difference is the
+# transport: handler.py pulls jobs off the RunPod queue instead of serving HTTP.
+#
+#   docker build --build-arg HYMOTION_BASE_IMAGE=hymotion-base:latest -f Dockerfile.queue -t hymotion-queue .
+#
+# RunPod endpoint type must be Serverless (queue), not load balancer. No port is
+# exposed and /ping is unused: readiness is the worker pulling a job.
+
+ARG HYMOTION_BASE_IMAGE=docker.io/sybiote/hymotion-base:latest
+FROM ${HYMOTION_BASE_IMAGE}
+
+COPY requirements-api.txt requirements-queue.txt ./
+RUN uv pip install --system --no-cache -r requirements-queue.txt
+
+COPY api.py handler.py ./
+
+ENV DISABLE_WOODEN_MESH=1
+
+CMD ["python", "-u", "handler.py"]

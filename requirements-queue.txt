@@ -1,0 +1,4 @@
+# RunPod queue-endpoint worker (handler.py). Adds the job-queue SDK on top of
+# the API deps; uvicorn stays for local Docker and the load-balancer image.
+-r requirements-api.txt
+runpod>=1.7.0
