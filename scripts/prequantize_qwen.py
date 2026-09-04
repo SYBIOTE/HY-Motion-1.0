@@ -58,7 +58,7 @@ def main() -> int:
         shutil.rmtree(dst)
 
     import torch
-    from transformers import AutoTokenizer, BitsAndBytesConfig, Qwen2ForCausalLM
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
     if not torch.cuda.is_available():
         print("ERROR: a GPU is required (bitsandbytes quantizes on-device).", file=sys.stderr)
@@ -73,18 +73,42 @@ def main() -> int:
         bnb_4bit_quant_type="nf4",
     )
 
+    # AutoModelForCausalLM, not Qwen2ForCausalLM: Qwen3 has QK-norm and no
+    # attention biases, so forcing the Qwen2 class silently drops q_norm/k_norm
+    # and randomly initializes q/k/v biases — a corrupted encoder that still
+    # saves and loads. text_encoder.py registers qwen3->Qwen2Config only as a
+    # fallback for transformers too old to know Qwen3; where the real class
+    # exists it must win.
     print(f">>> Loading + quantizing {src} (this is the slow part, once)")
     t0 = time.time()
-    model = Qwen2ForCausalLM.from_pretrained(
+    model = AutoModelForCausalLM.from_pretrained(
         src,
         quantization_config=bnb_config,
         device_map="auto",
         low_cpu_mem_usage=True,
         trust_remote_code=True,
     )
+    print(f">>> Loaded as {type(model).__name__}")
+    if type(model).__name__.startswith("Qwen2"):
+        print(
+            "ERROR: loaded the Qwen2 architecture for Qwen3 weights; the saved "
+            "encoder would be corrupt (dropped QK-norms, random biases). "
+            "Upgrade transformers so Qwen3ForCausalLM is available.",
+            file=sys.stderr,
+        )
+        return 1
     print(f">>> Quantized in {time.time() - t0:.1f}s")
 
-    print(f">>> Saving to {dst}")
+    free_gb = shutil.disk_usage(os.path.dirname(os.path.abspath(dst))).free / 1e9
+    if free_gb < 10:
+        print(
+            f"ERROR: only {free_gb:.1f}GB free at {dst}; the int4 copy needs ~7GB "
+            "plus room for shard staging. Free space and re-run.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f">>> Saving to {dst} ({free_gb:.1f}GB free)")
     t1 = time.time()
     model.save_pretrained(dst, safe_serialization=True)
 
