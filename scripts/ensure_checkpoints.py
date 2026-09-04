@@ -35,6 +35,21 @@ def _motion_ready(lite_dir: str) -> bool:
     return os.path.isfile(ckpt) and os.path.isfile(cfg)
 
 
+def _qwen_roots(ckpts_root: str) -> list[str]:
+    """
+    Encoder directories that satisfy the Qwen requirement, best first.
+
+    Either the fp16 weights or the pre-quantized int4 copy is enough: the
+    encoder prefers the int4 one when present (text_encoder._prequantized_qwen_dir)
+    and a volume holding only that is a complete, intended deployment, not a
+    partial one.
+    """
+    return [
+        os.environ.get("QWEN_INT4_PATH") or os.path.join(ckpts_root, "Qwen3-8B-int4"),
+        os.path.join(ckpts_root, "Qwen3-8B"),
+    ]
+
+
 def _sidecar_ready(kind: str, root: str) -> bool:
     cfg = os.path.join(root, "config.json")
     if not os.path.isfile(cfg):
@@ -105,11 +120,11 @@ def _verify(
         print(">>> Checkpoint layout ready (USE_HF_MODELS — Qwen/CLIP from Hugging Face).")
         return 0
 
-    qwen_root = os.path.join(ckpts_root, "Qwen3-8B")
+    qwen_roots = _qwen_roots(ckpts_root)
     clip_root = os.path.join(ckpts_root, "clip-vit-large-patch14")
     missing = []
-    if not _sidecar_ready("qwen", qwen_root):
-        missing.append(f"Qwen3-8B ({qwen_root})")
+    if not any(_sidecar_ready("qwen", r) for r in qwen_roots):
+        missing.append("Qwen3-8B (" + " or ".join(qwen_roots) + ")")
     if not _sidecar_ready("clip", clip_root):
         missing.append(f"clip-vit-large-patch14 ({clip_root})")
     if missing:
@@ -170,10 +185,11 @@ def main() -> int:
         print(">>> USE_HF_MODELS enabled — skipping local Qwen/CLIP download.")
         return _verify(ckpts_root, inference_lite, use_hf)
 
+    qwen_roots = _qwen_roots(ckpts_root)
     qwen_root = os.path.join(ckpts_root, "Qwen3-8B")
     clip_root = os.path.join(ckpts_root, "clip-vit-large-patch14")
 
-    if not _sidecar_ready("qwen", qwen_root):
+    if not any(_sidecar_ready("qwen", r) for r in qwen_roots):
         print(f">>> Ensuring Qwen3-8B under {qwen_root} ...")
         _download_qwen(qwen_root, cache_dir)
 
