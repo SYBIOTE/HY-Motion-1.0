@@ -9,6 +9,7 @@ Env:
   CKPTS_ROOT     Root for tencent/, Qwen3-8B/, clip-vit-large-patch14/ (default: ckpts).
   MODEL_PATH     Lite model dir; must match {CKPTS_ROOT}/tencent/HY-Motion-1.0-Lite.
   USE_HF_MODELS  If truthy ("1"), skip local Qwen + CLIP checks.
+  HF_HOME        Override the download staging dir (default: {CKPTS_ROOT}/.hf-cache).
 """
 
 from __future__ import annotations
@@ -49,26 +50,41 @@ def _sidecar_ready(kind: str, root: str) -> bool:
     )
 
 
-def _download_motion(lite_root_parent: str) -> None:
+def _cache_dir(ckpts_root: str) -> str:
+    """
+    Where huggingface_hub stages downloads before moving them into place.
+
+    It defaults to ~/.cache/huggingface — the container disk, which on a RunPod
+    pod is far smaller than the volume being seeded. Qwen3-8B alone is 16GB in
+    the cache plus 16GB at the destination, which overruns a 40GB disk with
+    "Disk quota exceeded". Stage beside the target instead, on the volume.
+    """
+    return os.environ.get("HF_HOME") or os.path.join(ckpts_root, ".hf-cache")
+
+
+def _download_motion(lite_root_parent: str, cache_dir: str) -> None:
     from huggingface_hub import snapshot_download
 
     snapshot_download(
         repo_id="tencent/HY-Motion-1.0",
         allow_patterns="HY-Motion-1.0-Lite/*",
         local_dir=lite_root_parent,
+        cache_dir=cache_dir,
     )
 
 
-def _download_qwen(target: str) -> None:
+def _download_qwen(target: str, cache_dir: str) -> None:
     from huggingface_hub import snapshot_download
 
-    snapshot_download(repo_id="Qwen/Qwen3-8B", local_dir=target)
+    snapshot_download(repo_id="Qwen/Qwen3-8B", local_dir=target, cache_dir=cache_dir)
 
 
-def _download_clip(target: str) -> None:
+def _download_clip(target: str, cache_dir: str) -> None:
     from huggingface_hub import snapshot_download
 
-    snapshot_download(repo_id="openai/clip-vit-large-patch14", local_dir=target)
+    snapshot_download(
+        repo_id="openai/clip-vit-large-patch14", local_dir=target, cache_dir=cache_dir
+    )
 
 
 def _verify(
@@ -142,9 +158,13 @@ def main() -> int:
     tencent_parent = os.path.join(ckpts_root, "tencent")
     os.makedirs(tencent_parent, exist_ok=True)
 
+    cache_dir = _cache_dir(ckpts_root)
+    os.makedirs(cache_dir, exist_ok=True)
+    print(f">>> Staging downloads via {cache_dir}")
+
     if not _motion_ready(inference_lite):
         print(f">>> Ensuring HY-Motion-1.0-Lite weights under {tencent_parent} ...")
-        _download_motion(tencent_parent)
+        _download_motion(tencent_parent, cache_dir)
 
     if use_hf:
         print(">>> USE_HF_MODELS enabled — skipping local Qwen/CLIP download.")
@@ -155,11 +175,11 @@ def main() -> int:
 
     if not _sidecar_ready("qwen", qwen_root):
         print(f">>> Ensuring Qwen3-8B under {qwen_root} ...")
-        _download_qwen(qwen_root)
+        _download_qwen(qwen_root, cache_dir)
 
     if not _sidecar_ready("clip", clip_root):
         print(f">>> Ensuring CLIP ViT-L under {clip_root} ...")
-        _download_clip(clip_root)
+        _download_clip(clip_root, cache_dir)
 
     return _verify(ckpts_root, inference_lite, use_hf)
 
