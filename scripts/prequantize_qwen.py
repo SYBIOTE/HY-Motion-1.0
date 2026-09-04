@@ -112,14 +112,23 @@ def main() -> int:
     t1 = time.time()
     model.save_pretrained(dst, safe_serialization=True)
 
-    # The tokenizer is loaded from the original path, but keep a copy beside the
-    # weights so the directory stands alone.
+    # Keep a tokenizer beside the weights so the directory stands alone once the
+    # fp16 source is deleted.
     try:
         AutoTokenizer.from_pretrained(
             src, padding_side="right", use_fast=False, trust_remote_code=True
         ).save_pretrained(dst)
     except Exception as e:  # noqa: BLE001 - tokenizer copy is a convenience
         print(f">>> [WARNING] Could not copy tokenizer: {e}")
+
+    # save_pretrained emits the fast tokenizer.json but not the raw BPE files,
+    # and the encoder loads the tokenizer with use_fast=False, which reads these
+    # directly. Without them the slow path gets None for the vocab file.
+    for name in ("vocab.json", "merges.txt"):
+        src_file = os.path.join(src, name)
+        if os.path.exists(src_file) and not os.path.exists(os.path.join(dst, name)):
+            shutil.copy2(src_file, os.path.join(dst, name))
+            print(f">>> Copied {name}")
 
     print(f">>> Saved in {time.time() - t1:.1f}s")
 

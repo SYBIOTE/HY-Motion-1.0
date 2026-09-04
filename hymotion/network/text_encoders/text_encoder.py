@@ -76,21 +76,44 @@ def _prequantized_qwen_dir() -> Optional[str]:
     return QWEN_INT4_PATH
 
 
+# The slow (use_fast=False) BPE tokenizer reads these directly; save_pretrained
+# writes only the fast tokenizer.json, so an int4 directory saved from a model
+# does not carry them and the slow path gets None for the vocab file
+# ("expected str, bytes or os.PathLike object, not NoneType").
+_SLOW_TOKENIZER_FILES = ("vocab.json", "merges.txt")
+
+
 def _qwen_tokenizer_dir(default_path: str) -> str:
     """
     Where to load the Qwen tokenizer from.
 
-    Once the fp16 weights are dropped in favour of the int4 copy, the original
-    directory is gone, and from_pretrained treats a non-existent path as a hub
-    repo id ("Repo id must be in the form 'repo_name'..."). prequantize_qwen.py
-    saves the tokenizer beside the int4 weights, so prefer that directory when
-    it carries one; fall back to the original otherwise, since the tokenizer is
-    unchanged by quantization and either copy is equivalent.
+    Quantization does not change the tokenizer, so any complete copy will do.
+    Prefer whichever directory actually holds the files the slow tokenizer
+    needs: the original fp16 directory when it is still present, otherwise the
+    int4 copy — which is the only one left once the fp16 shards are dropped.
     """
+
+    def _complete(path: str) -> bool:
+        return os.path.isdir(path) and all(
+            os.path.exists(os.path.join(path, name)) for name in _SLOW_TOKENIZER_FILES
+        )
+
+    if _complete(default_path):
+        return default_path
+
     prequantized = _prequantized_qwen_dir()
-    if prequantized and os.path.exists(
-        os.path.join(prequantized, "tokenizer_config.json")
-    ):
+    if prequantized and _complete(prequantized):
+        return prequantized
+
+    # Neither is complete: prefer whichever exists at all and let
+    # from_pretrained report precisely what is missing.
+    if os.path.isdir(default_path):
+        return default_path
+    if prequantized:
+        print(
+            f">>> [int4] {prequantized} is missing {list(_SLOW_TOKENIZER_FILES)}; "
+            "copy them from the fp16 directory or re-run scripts/prequantize_qwen.py"
+        )
         return prequantized
     return default_path
 
